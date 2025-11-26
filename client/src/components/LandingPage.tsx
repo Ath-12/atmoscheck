@@ -38,7 +38,7 @@ export default function LandingPage() {
             AtmosCheck
           </h1>
           <p className="text-blue-200/60 font-medium tracking-widest uppercase text-sm">
-            Premium Cinematic Weather
+            Check the sky.
           </p>
         </div>
 
