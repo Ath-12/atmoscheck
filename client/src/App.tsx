@@ -1,7 +1,6 @@
 // client/src/App.tsx
 import { useEffect, useState } from "react";
-// FIX: Type-only import for KeyboardEvent
-import type { KeyboardEvent } from "react";
+// Removed unused KeyboardEvent import to fix build error
 import { fetchWeather } from "./lib/api";
 import VideoBackground from "./components/VideoBackground";
 import { useSearchParams, useNavigate } from "react-router-dom";
