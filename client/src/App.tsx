@@ -1,14 +1,15 @@
 // client/src/App.tsx
-import { useEffect, useState, KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
+// FIX: Type-only import for KeyboardEvent
+import type { KeyboardEvent } from "react";
 import { fetchWeather } from "./lib/api";
 import VideoBackground from "./components/VideoBackground";
-import { useSearchParams, useNavigate } from "react-router-dom"; // NEW: Routing hooks
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { 
-  Wind, Droplets, Eye, Gauge, Sunrise, Sunset, 
+  Wind, Droplets, Eye, Sunrise, Sunset, 
   MapPin, Search, Leaf, ArrowLeft 
 } from "lucide-react";
 
-// Updated Type
 type Weather = {
   city: string;
   country: string;
@@ -19,7 +20,7 @@ type Weather = {
   windKph: number;
   pressure: number;
   visibility: number;
-  aqi: number; // Now 0-500
+  aqi: number;
   pm25: number;
   id: number;
   dt: number;
@@ -34,7 +35,6 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null);
   const [localTime, setLocalTime] = useState<string>("--:--");
   
-  // Routing
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryCity = searchParams.get("q") || "Mumbai";
@@ -54,13 +54,11 @@ export default function App() {
     }
   }
 
-  // Handle URL changes
   useEffect(() => {
     load(queryCity);
     setInputCity(queryCity);
   }, [queryCity]);
 
-  // Live Clock
   useEffect(() => {
     if (!w) return;
     const tick = () => {
@@ -76,7 +74,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [w]);
 
-  // AQI Color Scale (0-500)
   const getAqiColor = (val: number) => {
     if (val <= 50) return "text-green-400";
     if (val <= 100) return "text-yellow-400";
@@ -97,20 +94,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-white font-sans antialiased relative overflow-hidden">
-      
-      {/* WATERMARK FIX: We wrap VideoBackground in a container that crops it */}
       <div className="fixed inset-0 w-full h-full pointer-events-none scale-110"> 
-        <VideoBackground 
-          weatherId={w?.id ?? null} 
-          dt={w?.dt} 
-          sunrise={w?.sunrise} 
-          sunset={w?.sunset} 
-        />
+        <VideoBackground weatherId={w?.id ?? null} dt={w?.dt} sunrise={w?.sunrise} sunset={w?.sunset} />
       </div>
 
       <div className="relative z-10 flex flex-col items-center min-h-screen p-4 md:p-8">
-        
-        {/* Navigation Header */}
         <div className="w-full max-w-4xl flex items-center justify-between mb-8">
           <button onClick={() => navigate('/')} className="p-2 bg-black/20 hover:bg-black/40 rounded-full transition-colors backdrop-blur-md">
             <ArrowLeft className="w-6 h-6" />
@@ -134,8 +122,6 @@ export default function App() {
 
         {w && !loading && (
           <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            
-            {/* MAIN CARD */}
             <div className="md:col-span-2 lg:col-span-2 bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 flex flex-col justify-between min-h-[300px] shadow-2xl">
               <div className="flex justify-between items-start">
                 <div>
@@ -155,7 +141,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* REAL AQI CARD (0-500) */}
             <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between hover:bg-black/30 transition-colors">
               <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider">
                 <Leaf className="w-4 h-4" /> Air Quality
@@ -165,15 +150,10 @@ export default function App() {
                 <div className={`text-lg font-medium ${getAqiColor(w.aqi)}`}>{getAqiStatus(w.aqi)}</div>
               </div>
               <div className="w-full bg-white/10 h-1.5 rounded-full mt-4 overflow-hidden">
-                <div 
-                  className={`h-full bg-current ${getAqiColor(w.aqi)}`} 
-                  style={{ width: `${Math.min((w.aqi / 300) * 100, 100)}%` }} 
-                />
+                <div className={`h-full bg-current ${getAqiColor(w.aqi)}`} style={{ width: `${Math.min((w.aqi / 300) * 100, 100)}%` }} />
               </div>
-              <div className="text-xs opacity-40 mt-2">PM2.5: {w.pm25} µg/m³</div>
             </div>
 
-            {/* WIND */}
             <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
               <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider">
                 <Wind className="w-4 h-4" /> Wind
@@ -181,7 +161,6 @@ export default function App() {
               <div className="text-3xl font-bold mt-2">{Math.round(w.windKph)} <span className="text-base font-normal opacity-60">km/h</span></div>
             </div>
 
-            {/* HUMIDITY */}
             <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
               <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider">
                 <Droplets className="w-4 h-4" /> Humidity
@@ -189,7 +168,6 @@ export default function App() {
               <div className="text-3xl font-bold mt-2">{w.humidity}%</div>
             </div>
 
-            {/* VISIBILITY */}
             <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
               <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider">
                 <Eye className="w-4 h-4" /> Visibility
@@ -197,7 +175,6 @@ export default function App() {
               <div className="text-3xl font-bold mt-2">{(w.visibility / 1000).toFixed(1)} <span className="text-base font-normal opacity-60">km</span></div>
             </div>
 
-            {/* SUN & MOON */}
             <div className="md:col-span-2 bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex justify-around items-center">
               <div className="text-center">
                 <div className="flex items-center gap-2 justify-center opacity-60 text-sm uppercase font-bold tracking-wider mb-2">
@@ -217,7 +194,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-
           </div>
         )}
       </div>
