@@ -1,3 +1,4 @@
+// server/src/routes.ts
 import { Router } from "express";
 import axios from "axios";
 
@@ -6,52 +7,65 @@ const router = Router();
 router.get("/weather", async (req, res) => {
   try {
     const { lat, lon, q } = req.query;
-    if ((!lat || !lon) && !q) return res.status(400).json({ error: "Provide lat/lon or q" });
-
     const API_KEY = process.env.OPENWEATHER_KEY;
-    if (!API_KEY) return res.status(500).json({ error: "Missing OPENWEATHER_KEY on server" });
 
-    const url = lat && lon
-      ? `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`
-      : `https://api.openweathermap.org/data/2.5/weather?q=${q}&appid=${API_KEY}&units=metric`;
+    // 1. Get Coordinates first (if searching by City)
+    let latitude = lat;
+    let longitude = lon;
 
-    const { data } = await axios.get(url);
-    const code: number = data.weather?.[0]?.id ?? 800;
+    if (q) {
+      const geoRes = await axios.get(`http://api.openweathermap.org/geo/1.0/direct?q=${q}&limit=1&appid=${API_KEY}`);
+      if (!geoRes.data[0]) return res.status(404).json({ error: "City not found" });
+      latitude = geoRes.data[0].lat;
+      longitude = geoRes.data[0].lon;
+    }
+
+    // 2. Fetch Weather & Air Quality in parallel
+    const [weatherRes, aqiRes] = await Promise.all([
+      axios.get(`https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${API_KEY}&units=metric`),
+      axios.get(`http://api.openweathermap.org/data/2.5/air_pollution?lat=${latitude}&lon=${longitude}&appid=${API_KEY}`)
+    ]);
+
+    const data = weatherRes.data;
+    const aqiData = aqiRes.data.list[0];
+
+    // 3. Calculate Real AQI (US EPA Standard) using PM2.5
+    // Formula approximation for PM2.5 (ug/m3) to AQI
+    const pm25 = aqiData.components.pm2_5;
+    let realAqi = 0;
+    
+    if (pm25 <= 12.0) realAqi = ((50 - 0) / (12.0 - 0)) * (pm25 - 0) + 0;
+    else if (pm25 <= 35.4) realAqi = ((100 - 51) / (35.4 - 12.1)) * (pm25 - 12.1) + 51;
+    else if (pm25 <= 55.4) realAqi = ((150 - 101) / (55.4 - 35.5)) * (pm25 - 35.5) + 101;
+    else if (pm25 <= 150.4) realAqi = ((200 - 151) / (150.4 - 55.5)) * (pm25 - 55.5) + 151;
+    else if (pm25 <= 250.4) realAqi = ((300 - 201) / (250.4 - 150.5)) * (pm25 - 150.5) + 201;
+    else realAqi = ((500 - 301) / (500.4 - 250.5)) * (pm25 - 250.5) + 301;
 
     res.json({
       city: data.name,
-      tempC: data.main?.temp,
-      feelsLikeC: data.main?.feels_like,
-      humidity: data.main?.humidity,
-      windKph: (data.wind?.speed ?? 0) * 3.6,
-      conditionText: data.weather?.[0]?.description,
-      conditionCode: code,
-      bucket: mapOpenWeatherToBucket(code),
-      sunrise: data.sys?.sunrise,
-      sunset: data.sys?.sunset,
-      isDay: isDaytime(data.dt, data.sys?.sunrise, data.sys?.sunset)
+      country: data.sys.country,
+      timezone: data.timezone,
+      dt: data.dt,
+      sunrise: data.sys.sunrise,
+      sunset: data.sys.sunset,
+      tempC: data.main.temp,
+      feelsLikeC: data.main.feels_like,
+      conditionText: data.weather[0].description,
+      id: data.weather[0].id,
+      humidity: data.main.humidity,
+      windKph: data.wind.speed * 3.6,
+      pressure: data.main.pressure,
+      visibility: data.visibility,
+      // Pass the calculated Real AQI
+      aqi: Math.round(realAqi), 
+      // Pass raw PM2.5 just in case
+      pm25: pm25 
     });
+
   } catch (e: any) {
-    res.status(500).json({ error: e?.message ?? "Unknown error" });
+    console.error(e);
+    res.status(500).json({ error: "Server Error" });
   }
 });
-
-function isDaytime(dt?: number, sr?: number, ss?: number) {
-  if (!dt || !sr || !ss) return true;
-  return dt >= sr && dt <= ss;
-}
-
-function mapOpenWeatherToBucket(code: number):
-  "clear"|"sunny"|"partly_cloudy"|"cloudy"|"rain"|"thunderstorm"|"snow"|"fog" {
-
-  if (code >= 200 && code < 300) return "thunderstorm";
-  if (code >= 300 && code < 600) return "rain";
-  if (code >= 600 && code < 700) return "snow";
-  if (code >= 700 && code < 800) return "fog";
-  if (code === 800) return "clear";
-  if (code >= 801 && code <= 802) return "partly_cloudy";
-  if (code >= 803) return "cloudy";
-  return "cloudy";
-}
 
 export default router;
