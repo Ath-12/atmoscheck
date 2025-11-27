@@ -1,7 +1,6 @@
 ﻿# ☁️ AtmosCheck — Cinematic Weather Intelligence
 
-![AtmosCheck Banner](https://via.placeholder.com/1200x400.png?text=AtmosCheck+Preview)
-*(Replace this link with a real screenshot of your app once you take one!)*
+
 
 **AtmosCheck** is a premium, full-stack weather application designed to be beautiful and immersive. It features a cinematic interface that adapts to the real-world weather using dynamic video backgrounds, "Glassmorphism" UI, and real-time data visualization.
 
