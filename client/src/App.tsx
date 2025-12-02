@@ -260,8 +260,6 @@ export default function App() {
                 </div>
               </div>
             )}
-            
-            <div className="text-center opacity-30 text-xs py-4">Designed by Atharva • Powered by AtmosCheck</div>
           </div>
         )}
       </div>
