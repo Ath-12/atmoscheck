@@ -8,41 +8,85 @@ router.get("/weather", async (req, res) => {
   try {
     const { lat, lon, q } = req.query;
     const API_KEY = process.env.OPENWEATHER_KEY;
+    const WAQI_KEY = process.env.WAQI_KEY; // <--- New Key
 
-    // 1. Get Coordinates first (if searching by City)
     let latitude = lat;
     let longitude = lon;
+    let correctCityName = null;
+    let stateName = null;
 
+    // 1. Geocoding
     if (q) {
       const geoRes = await axios.get(`http://api.openweathermap.org/geo/1.0/direct?q=${q}&limit=1&appid=${API_KEY}`);
       if (!geoRes.data[0]) return res.status(404).json({ error: "City not found" });
+      
       latitude = geoRes.data[0].lat;
       longitude = geoRes.data[0].lon;
+      correctCityName = geoRes.data[0].name;
+      stateName = geoRes.data[0].state;
     }
 
-    // 2. Fetch Weather & Air Quality in parallel
-    const [weatherRes, aqiRes] = await Promise.all([
+    // 2. Fetch Weather & Forecast (OpenWeather)
+    const [weatherRes, forecastRes] = await Promise.all([
       axios.get(`https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${API_KEY}&units=metric`),
-      axios.get(`http://api.openweathermap.org/data/2.5/air_pollution?lat=${latitude}&lon=${longitude}&appid=${API_KEY}`)
+      axios.get(`https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&appid=${API_KEY}&units=metric`),
     ]);
 
-    const data = weatherRes.data;
-    const aqiData = aqiRes.data.list[0];
+    // 3. Fetch Accurate AQI (WAQI - Ground Station)
+    // Fallback to Open-Meteo if no key provided
+    let aqiVal = 0;
+    let pm25Val = 0;
 
-    // 3. Calculate Real AQI (US EPA Standard) using PM2.5
-    // Formula approximation for PM2.5 (ug/m3) to AQI
-    const pm25 = aqiData.components.pm2_5;
-    let realAqi = 0;
+    if (WAQI_KEY) {
+      try {
+        const waqiRes = await axios.get(`https://api.waqi.info/feed/geo:${latitude};${longitude}/?token=${WAQI_KEY}`);
+        if (waqiRes.data.status === 'ok') {
+          aqiVal = waqiRes.data.data.aqi;
+          // Try to find PM2.5 in specific pollutants, else default to AQI
+          pm25Val = waqiRes.data.data.iaqi?.pm25?.v || aqiVal; 
+        }
+      } catch (err) {
+        console.error("WAQI Error, falling back");
+      }
+    } 
     
-    if (pm25 <= 12.0) realAqi = ((50 - 0) / (12.0 - 0)) * (pm25 - 0) + 0;
-    else if (pm25 <= 35.4) realAqi = ((100 - 51) / (35.4 - 12.1)) * (pm25 - 12.1) + 51;
-    else if (pm25 <= 55.4) realAqi = ((150 - 101) / (55.4 - 35.5)) * (pm25 - 35.5) + 101;
-    else if (pm25 <= 150.4) realAqi = ((200 - 151) / (150.4 - 55.5)) * (pm25 - 55.5) + 151;
-    else if (pm25 <= 250.4) realAqi = ((300 - 201) / (250.4 - 150.5)) * (pm25 - 150.5) + 201;
-    else realAqi = ((500 - 301) / (500.4 - 250.5)) * (pm25 - 250.5) + 301;
+    // Fallback: If WAQI failed or no key, use Open-Meteo (Satellite)
+    if (aqiVal === 0) {
+       const omRes = await axios.get(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=us_aqi,pm2_5`);
+       aqiVal = omRes.data.current.us_aqi;
+       pm25Val = omRes.data.current.pm2_5;
+    }
+
+    const data = weatherRes.data;
+    const forecastList = forecastRes.data.list;
+
+    // 4. Process Forecasts
+    const hourlyForecast = forecastList.slice(0, 8).map((item: any) => ({
+      dt: item.dt,
+      temp: item.main.temp,
+      icon: item.weather[0].icon,
+      pop: item.pop
+    }));
+
+    const dailyForecast = [];
+    const seenDates = new Set();
+    for (const item of forecastList) {
+      const date = new Date(item.dt * 1000).toLocaleDateString();
+      if (!seenDates.has(date) && dailyForecast.length < 5) {
+        seenDates.add(date);
+        dailyForecast.push({
+          date: item.dt,
+          temp: item.main.temp,
+          icon: item.weather[0].icon,
+          condition: item.weather[0].main,
+          pop: item.pop
+        });
+      }
+    }
 
     res.json({
-      city: data.name,
+      city: correctCityName || data.name,
+      state: stateName,
       country: data.sys.country,
       timezone: data.timezone,
       dt: data.dt,
@@ -56,10 +100,10 @@ router.get("/weather", async (req, res) => {
       windKph: data.wind.speed * 3.6,
       pressure: data.main.pressure,
       visibility: data.visibility,
-      // Pass the calculated Real AQI
-      aqi: Math.round(realAqi), 
-      // Pass raw PM2.5 just in case
-      pm25: pm25 
+      aqi: aqiVal, // This will now match Google
+      pm25: pm25Val,
+      forecast: dailyForecast,
+      hourly: hourlyForecast
     });
 
   } catch (e: any) {

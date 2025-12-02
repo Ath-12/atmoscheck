@@ -2,10 +2,11 @@
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CloudRain, Zap, Search, ArrowRight } from 'lucide-react'; 
+import { CloudRain, Zap, Search, ArrowRight, MapPin } from 'lucide-react'; 
 
 export default function LandingPage() {
   const [city, setCity] = useState('');
+  const [isLoadingLoc, setIsLoadingLoc] = useState(false);
   const navigate = useNavigate();
 
   const handleSearch = () => {
@@ -16,6 +17,38 @@ export default function LandingPage() {
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') handleSearch();
+  };
+
+  // 📍 NEW: GPS Location Logic
+  // ... inside LandingPage component
+
+  const handleLocationClick = () => {
+    if (navigator.geolocation) {
+      setIsLoadingLoc(true);
+      
+      // OPTION OBJECT: Request High Accuracy
+      const options = {
+        enableHighAccuracy: true, // Forces GPS/Wi-Fi instead of IP
+        timeout: 5000,
+        maximumAge: 0
+      };
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          navigate(`/weather?lat=${lat}&lon=${lon}`);
+        },
+        (error) => {
+          console.error(error); // Log error for debugging
+          alert("Unable to retrieve location. Please type your city.");
+          setIsLoadingLoc(false);
+        },
+        options // Pass the options here
+      );
+    } else {
+      alert("Geolocation is not supported by your browser");
+    }
   };
 
   return (
@@ -42,7 +75,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* SEARCH INPUT + BUTTON */}
+        {/* SEARCH INPUT + BUTTONS */}
         <div className="w-full max-w-[450px] relative group animate-in slide-in-from-bottom-8 fade-in duration-1000 delay-300">
           <div className="relative flex items-center">
             <Search className="absolute left-6 w-5 h-5 text-white/40" />
@@ -53,19 +86,34 @@ export default function LandingPage() {
               onChange={(e) => setCity(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Enter a city..."
-              className="w-full bg-white/5 border border-white/10 rounded-full pl-14 pr-16 py-4 text-xl outline-none focus:bg-white/10 focus:border-blue-400/50 transition-all placeholder:text-white/20 shadow-2xl"
+              className="w-full bg-white/5 border border-white/10 rounded-full pl-14 pr-28 py-4 text-xl outline-none focus:bg-white/10 focus:border-blue-400/50 transition-all placeholder:text-white/20 shadow-2xl"
             />
             
-            {/* NEW SEARCH BUTTON */}
-            <button 
-              onClick={handleSearch}
-              className="absolute right-2 p-2 bg-blue-600 hover:bg-blue-500 rounded-full transition-colors shadow-lg group-focus-within:bg-blue-500"
-            >
-              <ArrowRight className="w-6 h-6 text-white" />
-            </button>
+            <div className="absolute right-2 flex items-center gap-2">
+               {/* 📍 GPS BUTTON */}
+               <button 
+                onClick={handleLocationClick}
+                disabled={isLoadingLoc}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white/80"
+                title="Use my location"
+              >
+                {isLoadingLoc ? (
+                   <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <MapPin className="w-6 h-6" />
+                )}
+              </button>
+
+              {/* SEARCH ARROW */}
+              <button 
+                onClick={handleSearch}
+                className="p-2 bg-blue-600 hover:bg-blue-500 rounded-full transition-colors shadow-lg"
+              >
+                <ArrowRight className="w-6 h-6 text-white" />
+              </button>
+            </div>
           </div>
 
-          {/* Glow Ring */}
           <div className="absolute inset-0 rounded-full ring-1 ring-white/20 group-hover:ring-white/40 pointer-events-none transition-all" />
         </div>
       </div>
