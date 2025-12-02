@@ -8,13 +8,24 @@ import {
   MapPin, Search, Leaf, ArrowLeft, Calendar, Loader2, Clock, Umbrella
 } from "lucide-react";
 
-// Types
-type HourlyItem = { dt: number; temp: number; icon: string; pop: number; };
-type ForecastDay = { date: number; temp: number; condition: string; icon: string; pop: number; };
+type HourlyItem = {
+  dt: number;
+  temp: number;
+  icon: string;
+  pop: number;
+};
+
+type ForecastDay = {
+  date: number;
+  temp: number;
+  condition: string;
+  icon: string;
+  pop: number;
+};
 
 type Weather = {
   city: string;
-  state?: string; // NEW: State Name
+  state?: string; // State Name
   country: string;
   tempC: number;
   feelsLikeC: number;
@@ -41,7 +52,8 @@ export default function App() {
   const [clockTime, setClockTime] = useState<string>("--:--");
   const [clockDate, setClockDate] = useState<string>("");
   
-  const [searchParams, setSearchParams] = useSearchParams();
+  // FIX: Removed 'setSearchParams' because it was unused and causing the build error
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
   const queryCity = searchParams.get("q");
@@ -94,7 +106,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [w]);
 
-  // AQI Colors
   const getAqiColor = (val: number) => {
     if (val <= 50) return "text-green-400";
     if (val <= 100) return "text-yellow-400";
@@ -145,7 +156,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Loading / Error */}
         {loading && <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/20 backdrop-blur-sm"><Loader2 className="w-12 h-12 animate-spin text-white" /></div>}
         {err && <div className="bg-red-500/50 px-6 py-2 rounded-full mb-4 backdrop-blur-md">{err}</div>}
 
@@ -153,13 +163,13 @@ export default function App() {
           <div className="w-full max-w-4xl space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-10">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               
-              {/* MAIN CARD (Updated with State) */}
+              {/* MAIN CARD */}
               <div className="md:col-span-2 lg:col-span-2 bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 flex flex-col justify-between min-h-[300px] shadow-2xl">
                 <div>
                   <h1 className="text-4xl font-bold tracking-tight flex flex-wrap items-center gap-2">
                     <MapPin className="w-6 h-6 opacity-70" /> 
-                    {/* ✅ DISPLAY: City, State, Country */}
-                    {w.city}, <span className="opacity-70 text-2xl">{w.state}</span>
+                    {/* Display: City, State, Country */}
+                    {w.city}, {w.state && <span className="opacity-70 text-2xl">{w.state},</span>}
                     <span className="text-xl opacity-50">{w.country}</span>
                   </h1>
                   <p className="text-lg opacity-80 font-medium mt-1 flex items-center gap-2">
@@ -176,7 +186,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* AQI (0-500) */}
+              {/* AQI */}
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between hover:bg-black/30 transition-colors">
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider">
                   <Leaf className="w-4 h-4" /> Air Quality
@@ -190,7 +200,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Wind / Hum / Vis / Sun / Etc (Same as before, abbreviated here for clarity) */}
+              {/* Wind / Hum / Vis / Sun */}
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider"><Wind className="w-4 h-4" /> Wind</div>
                 <div className="text-3xl font-bold mt-2">{Math.round(w.windKph)} <span className="text-base font-normal opacity-60">km/h</span></div>
@@ -216,7 +226,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Hourly & 5-Day (Same as before) */}
+            {/* HOURLY FORECAST */}
             {w.hourly && w.hourly.length > 0 && (
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider mb-4"><Clock className="w-4 h-4" /> Hourly Forecast</div>
@@ -232,6 +242,8 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* 5-DAY FORECAST */}
             {w.forecast && w.forecast.length > 0 && (
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
                  <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider mb-4"><Calendar className="w-4 h-4" /> 5-Day Forecast</div>
