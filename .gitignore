@@ -25,3 +25,6 @@ client/public/posters/
 
 # misc
 .cache
+
+# test output
+coverage/
