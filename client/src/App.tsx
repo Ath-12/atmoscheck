@@ -1,5 +1,5 @@
 // client/src/App.tsx
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchWeather, WeatherError } from "./lib/api";
 import { clockDate as fmtDate, clockTime as fmtTime, hourLabel, weekday } from "./lib/time";
 import VideoBackground from "./components/VideoBackground";
@@ -72,7 +72,8 @@ export default function App() {
     if (city) navigate(`/weather?q=${encodeURIComponent(city)}`);
   }
 
-  async function loadData() {
+  // Re-created only when the searched place changes; the effect below then reloads.
+  const loadData = useCallback(async () => {
     setLoading(true);
     setErr(null);
     setSlow(false);
@@ -98,9 +99,9 @@ export default function App() {
       setLoading(false);
       setSlow(false);
     }
-  }
+  }, [queryCity, lat, lon]);
 
-  useEffect(() => { loadData(); }, [queryCity, lat, lon]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   // Tab Title
   useEffect(() => {

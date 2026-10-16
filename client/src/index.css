@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+/* Background picture cross-fade (VideoBackground.tsx) */
+@keyframes bg-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Respect visitors who turn off animations in their OS settings */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
