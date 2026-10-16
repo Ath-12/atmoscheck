@@ -1,145 +1,125 @@
-﻿# ☁️ AtmosCheck — Cinematic Weather Intelligence
+﻿# ☁️ AtmosCheck — Check the sky
 
+A full-stack weather website where the background matches the real sky: search a city or use your location, and get the current weather, air quality, the next 24 hours and a 5-day forecast, all shown in the city's own local time.
 
+[![ci](https://github.com/Ath-12/atmoscheck/actions/workflows/ci.yml/badge.svg)](https://github.com/Ath-12/atmoscheck/actions/workflows/ci.yml)
 
-**AtmosCheck** is a premium, full-stack weather application designed to be beautiful and immersive. It features a cinematic interface that adapts to the real-world weather using dynamic video backgrounds, "Glassmorphism" UI, and real-time data visualization.
-
-**Live Demo:** [https://atmoscheck.vercel.app](https://atmoscheck.vercel.app)
-
----
-
-## ✨ Key Features
-
-- **🎬 Dynamic Video Backgrounds:** The app background changes instantly based on current weather conditions (Rain, Snow, Clear Night, Haze, etc.).
-- **🌫️ Real-Time AQI:** Integrated Air Quality Index (US EPA Standard 0-500) with color-coded health warnings.
-- **💎 Glassmorphism UI:** Modern, frosted-glass interface built with Tailwind CSS v4.
-- **🌍 Live Search:** Instant weather data for any city worldwide using the OpenWeather API.
-- **⚡ Smart Caching:** React state management ensures smooth transitions without flickering.
-- **📱 Fully Responsive:** Optimized for desktops, tablets, and mobile devices.
+**Live:** https://atmoscheck.vercel.app
+_The backend is on Render's free plan and sleeps when idle. The first search after a quiet spell can take up to a minute; the app says so and retries automatically._
 
 ---
 
-## 🛠️ Tech Stack
+## ✨ Features
 
-### **Frontend (Client)**
-- **Framework:** React 18 + TypeScript
-- **Build Tool:** Vite
-- **Styling:** Tailwind CSS v4
-- **Icons:** Lucide React
-- **Routing:** React Router DOM
+- **Weather-matched backgrounds**: 28 pictures chosen by condition, day or night in that city, sunrise/sunset "golden hour", and India-specific scenes (monsoon clouds, heavy rain, dust, morning fog). New pictures cross-fade in.
+- **Everything in the city's local time**: clock, sunrise, sunset, hourly and daily labels are correct even when you look up Tokyo from India.
+- **Air quality (US AQI)** with a health label: ground-station data from WAQI when available, otherwise a model estimate from Open-Meteo. If neither answers, the weather still loads.
+- **Next 24 hours** (3-hour steps) and a **5-day forecast** with daily high/low and rain chance.
+- **Practical tips** from the numbers: umbrella (with the time rain is likely), unhealthy air, heat, cold, strong wind.
+- **°C / °F** toggle (wind in km/h or mph), remembered on your device.
+- **Recent searches** as one-tap chips (stored only in your browser), **use my location**, and a **share** button.
+- **Responsive** glass-style UI with Tailwind CSS.
 
-### **Backend (Server)**
-- **Runtime:** Node.js
-- **Framework:** Express.js
-- **API Integration:** Axios (OpenWeatherMap)
-- **Deployment:** Render (Backend) + Vercel (Frontend)
+## 🧱 How it works
 
----
+```
+Browser: React app (client/, on Vercel)
+   │  GET /api/weather?q=Pune   or  ?lat=…&lon=…
+   ▼
+Express API (server/, on Render), API keys live only here
+   ├─► OpenWeather Geocoding       city → coordinates
+   ├─► OpenWeather Current + 5-day forecast (in parallel)
+   └─► WAQI (if key) ──no reading──► Open-Meteo     air quality
+```
 
-## 🚀 Getting Started (Run Locally)
+The backend exists so the OpenWeather key never reaches the browser, and so several API calls become one clean response.
 
-Follow these steps to run AtmosCheck on your local machine.
+**Protecting the backend** (it's a public API on a free plan):
+- **CORS**: only atmoscheck.vercel.app, its preview deployments and localhost can call it from a browser.
+- **Rate limit**: 60 requests per 10 minutes per visitor.
+- **Cache**: each city's result is kept for 10 minutes, so repeat searches are instant and don't use API quota.
+- **Input validation**: city names and coordinates are checked, URL-encoded and sent over HTTPS only.
 
-### **1. Clone the Repository**
+## 🛠️ Tech stack
+
+| Part | Technology |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, React Router, Tailwind CSS v4, Lucide icons |
+| Backend | Node.js, Express 5, TypeScript, Axios, express-rate-limit |
+| Data | OpenWeather (geocoding, current, 5-day/3-hour forecast), WAQI, Open-Meteo Air Quality |
+| Tests | Vitest (both), Supertest (API), GitHub Actions CI |
+| Hosting | Vercel (frontend), Render (backend) |
+
+## 🚀 Run it locally
+
 ```bash
-git clone [https://github.com/Ath-12/atmoscheck.git](https://github.com/Ath-12/atmoscheck.git)
+git clone https://github.com/Ath-12/atmoscheck.git
 cd atmoscheck
-2. Backend Setup (Server)
-You need an API Key from OpenWeatherMap to fetch data.
+```
 
-Bash
+**Backend**
 
-# Move to server folder
+```bash
 cd server
-
-# Install dependencies
 npm install
+cp .env.example .env      # then put your OpenWeather key in OPENWEATHER_KEY
+npm run dev               # http://localhost:5050
+```
 
-# Create environment file
-# (On Windows, manually create a .env file if this command doesn't work)
-echo OPENWEATHER_KEY=your_api_key_here > .env
+**Frontend** (new terminal)
 
-# Start the Backend Server
-npm run dev
-The server will start on http://localhost:5050.
-
-3. Frontend Setup (Client)
-Open a new terminal window (keep the server running).
-
-Bash
-
-# Move to client folder
+```bash
 cd client
-
-# Install dependencies
 npm install
+npm run dev               # http://localhost:5173
+```
 
-# Start the React App
-npm run dev
-The frontend will start on http://localhost:5173.
+Environment variables (names only; see the `.env.example` files):
 
-📂 Project Structure
-Bash
+| Where | Variable | Required |
+|---|---|---|
+| server | `OPENWEATHER_KEY` | yes |
+| server | `WAQI_KEY` | no (falls back to Open-Meteo) |
+| server | `ALLOWED_ORIGINS` | no (extra websites allowed to call the API) |
+| client | `VITE_API_URL` | no (defaults to localhost in dev, Render in production) |
 
-atmoscheck/
-├── client/                 # Frontend (React + Vite)
-│   ├── public/             
-│   │   ├── posters/        # Static background images (.jpg)
-│   │   ├── videos/         # Animated backgrounds (.webm)
-│   │   └── logo.png        # App Logo
-│   ├── src/
-│   │   ├── components/     # UI Components (LandingPage, VideoBackground)
-│   │   ├── lib/            # API Utilities
-│   │   ├── utils/          # Helper logic (videoMap.ts)
-│   │   └── App.tsx         # Main Dashboard Logic
-│
-├── server/                 # Backend (Node + Express)
-│   ├── src/
-│   │   ├── routes.ts       # Weather & AQI API Routes
-│   │   └── index.ts        # Server Entry Point
-└── README.md               # Documentation
-🌍 Deployment Guide
-Backend (Render)
-Create a new Web Service on Render.
+## 🧪 Tests
 
-Connect your GitHub repo.
+```bash
+cd client && npm test     # time zones, units, tips, background rules, recent searches
+cd server && npm test     # API with outside services faked: caching, CORS, rate limit, errors
+```
 
-Set Root Directory to server.
+Outside APIs are faked in the tests, so they need no keys and no internet. CI runs lint, tests and build for both parts on every push.
 
-Set Build Command to npm install && npm run build.
+## 🌍 Deployment
 
-Set Start Command to npm start.
+**Backend (Render, Web Service):** root directory `server`, build `npm install && npm run build`, start `npm start`, environment variable `OPENWEATHER_KEY` (optionally `WAQI_KEY`).
 
-Add Environment Variable: OPENWEATHER_KEY.
+**Frontend (Vercel):** root directory `client`, framework preset Vite. `client/vercel.json` sends every path to `index.html`, so links like `/weather?q=Pune` work on refresh.
 
-Frontend (Vercel)
-Create a new Project on Vercel.
+## 📁 Project structure
 
-Connect your GitHub repo.
+```
+client/
+  src/App.tsx                    dashboard
+  src/components/LandingPage.tsx search, location, recent searches
+  src/components/VideoBackground.tsx  background picture + cross-fade
+  src/utils/videoMap.ts          which picture for which weather
+  src/lib/                       api, city time, units, tips, storage
+  public/posters/                background pictures
+server/
+  src/index.ts                   app setup: CORS, rate limit, health check
+  src/routes.ts                  GET /api/weather
+  src/forecast.ts                24-hour and daily summaries
+  src/aqi.ts                     air quality with fallback
+  src/cache.ts                   10-minute in-memory cache
+```
 
-Set Root Directory to client.
+## 📄 License
 
-Select Framework Preset as Vite.
+MIT, see [LICENSE](LICENSE).
 
-Deploy!
+## 👨‍💻 Author
 
-🤝 Contributing
-Contributions are welcome! Please fork the repository and submit a pull request for any improvements.
-
-Fork the Project
-
-Create your Feature Branch (git checkout -b feature/AmazingFeature)
-
-Commit your Changes (git commit -m 'Add some AmazingFeature')
-
-Push to the Branch (git push origin feature/AmazingFeature)
-
-Open a Pull Request
-
-📄 License
-Distributed under the MIT License. See LICENSE for more information.
-
-👨‍💻 Author
-Atharva Palsuledesai
-
-GitHub: @Ath-12
+**Atharva Palsuledesai** · [@Ath-12](https://github.com/Ath-12)

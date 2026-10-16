@@ -19,9 +19,9 @@ server/dist
 .vscode/
 .DS_Store
 
-# media (keep OUT of git — host on CDN later)
+# media: background pictures (client/public/posters) ARE committed;
+# large video files are not
 client/public/videos/
-client/public/posters/
 
 # misc
 .cache
