@@ -34,8 +34,9 @@ type Weather = {
   windKph: number;
   pressure: number;
   visibility: number;
-  aqi: number;
-  pm25: number;
+  aqi: number | null;
+  pm25: number | null;
+  aqiSource?: "station" | "model" | null;
   id: number;
   dt: number;
   sunrise: number;
@@ -191,13 +192,24 @@ export default function App() {
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider">
                   <Leaf className="w-4 h-4" /> Air Quality
                 </div>
-                <div className="mt-2">
-                  <div className="text-4xl font-bold">{w.aqi}</div>
-                  <div className={`text-lg font-medium ${getAqiColor(w.aqi)}`}>{getAqiStatus(w.aqi)}</div>
-                </div>
-                <div className="w-full bg-white/10 h-1.5 rounded-full mt-4 overflow-hidden">
-                  <div className={`h-full bg-current ${getAqiColor(w.aqi)}`} style={{ width: `${Math.min((w.aqi / 300) * 100, 100)}%` }} />
-                </div>
+                {w.aqi === null ? (
+                  <div className="mt-2 text-lg opacity-70">Unavailable right now</div>
+                ) : (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-4xl font-bold">{w.aqi}</div>
+                      <div className={`text-lg font-medium ${getAqiColor(w.aqi)}`}>{getAqiStatus(w.aqi)}</div>
+                    </div>
+                    <div className="w-full bg-white/10 h-1.5 rounded-full mt-4 overflow-hidden">
+                      <div className={`h-full bg-current ${getAqiColor(w.aqi)}`} style={{ width: `${Math.min((w.aqi / 300) * 100, 100)}%` }} />
+                    </div>
+                    {w.aqiSource && (
+                      <div className="text-xs opacity-50 mt-2">
+                        US AQI · {w.aqiSource === "station" ? "ground station" : "model estimate"}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Wind / Hum / Vis / Sun */}

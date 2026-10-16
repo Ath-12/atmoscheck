@@ -2,6 +2,7 @@
 import { Router } from "express";
 import axios from "axios";
 import { TtlCache } from "./cache";
+import { getAqi } from "./aqi";
 
 const router = Router();
 
@@ -81,30 +82,8 @@ router.get("/weather", async (req, res) => {
       }),
     ]);
 
-    // 3. Fetch Accurate AQI (WAQI - Ground Station)
-    // Fallback to Open-Meteo if no key provided
-    let aqiVal = 0;
-    let pm25Val = 0;
-
-    if (WAQI_KEY) {
-      try {
-        const waqiRes = await http.get(`https://api.waqi.info/feed/geo:${latitude};${longitude}/`, { params: { token: WAQI_KEY } });
-        if (waqiRes.data.status === 'ok') {
-          aqiVal = waqiRes.data.data.aqi;
-          // Try to find PM2.5 in specific pollutants, else default to AQI
-          pm25Val = waqiRes.data.data.iaqi?.pm25?.v || aqiVal; 
-        }
-      } catch (err) {
-        console.error("WAQI Error, falling back");
-      }
-    } 
-    
-    // Fallback: If WAQI failed or no key, use Open-Meteo (Satellite)
-    if (aqiVal === 0) {
-       const omRes = await http.get("https://air-quality-api.open-meteo.com/v1/air-quality", { params: { latitude, longitude, current: "us_aqi,pm2_5" } });
-       aqiVal = omRes.data.current.us_aqi;
-       pm25Val = omRes.data.current.pm2_5;
-    }
+    // 3. Air quality: station data first, model data as fallback, never fatal.
+    const air = await getAqi(http, Number(latitude), Number(longitude), WAQI_KEY);
 
     const data = weatherRes.data;
     const forecastList = forecastRes.data.list;
@@ -149,8 +128,9 @@ router.get("/weather", async (req, res) => {
       windKph: data.wind.speed * 3.6,
       pressure: data.main.pressure,
       visibility: data.visibility,
-      aqi: aqiVal, // This will now match Google
-      pm25: pm25Val,
+      aqi: air.aqi,          // null when no source had a reading
+      pm25: air.pm25,
+      aqiSource: air.source, // "station" | "model" | null
       forecast: dailyForecast,
       hourly: hourlyForecast
     };
