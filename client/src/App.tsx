@@ -271,7 +271,7 @@ export default function App() {
             {/* HOURLY FORECAST */}
             {w.hourly && w.hourly.length > 0 && (
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
-                <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider mb-4"><Clock className="w-4 h-4" /> Hourly Forecast</div>
+                <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider mb-4"><Clock className="w-4 h-4" /> Next 24 hours</div>
                 <div className="flex overflow-x-auto gap-4 pb-2 scrollbar-hide">
                   {w.hourly.map((hour, i) => (
                     <div key={i} className="flex flex-col items-center min-w-[80px] p-3 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
