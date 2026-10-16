@@ -1,12 +1,25 @@
 // server/src/routes.ts
 import { Router } from "express";
 import axios from "axios";
+import { TtlCache } from "./cache";
 
 const router = Router();
+
+// Same city within 10 minutes -> answered from memory, no OpenWeather call.
+const weatherCache = new TtlCache<object>(10 * 60 * 1000);
 
 router.get("/weather", async (req, res) => {
   try {
     const { lat, lon, q } = req.query;
+    // Round coordinates (~1 km) so nearby GPS readings share a cache entry.
+    const cacheKey = q
+      ? `q:${String(q).trim().toLowerCase()}`
+      : `ll:${Number(lat).toFixed(2)},${Number(lon).toFixed(2)}`;
+    const cached = weatherCache.get(cacheKey);
+    if (cached) {
+      res.set("X-Cache", "HIT");
+      return res.json(cached);
+    }
     const API_KEY = process.env.OPENWEATHER_KEY;
     const WAQI_KEY = process.env.WAQI_KEY; // <--- New Key
 
@@ -84,7 +97,7 @@ router.get("/weather", async (req, res) => {
       }
     }
 
-    res.json({
+    const body = {
       city: correctCityName || data.name,
       state: stateName,
       country: data.sys.country,
@@ -104,7 +117,10 @@ router.get("/weather", async (req, res) => {
       pm25: pm25Val,
       forecast: dailyForecast,
       hourly: hourlyForecast
-    });
+    };
+    weatherCache.set(cacheKey, body);
+    res.set("X-Cache", "MISS");
+    res.json(body);
 
   } catch (e: any) {
     console.error(e);
