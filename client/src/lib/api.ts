@@ -48,7 +48,9 @@ const ATTEMPT_TIMEOUT_MS = 35000;        // Render can hold a request while waki
 export async function fetchWeather(params: { q?: string; lat?: number; lon?: number }) {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
-  if (params.lat && params.lon) { qs.set("lat", String(params.lat)); qs.set("lon", String(params.lon)); }
+  // "!= null" rather than a truthy check: 0 is a valid latitude/longitude
+  // (equator / prime meridian) and must not be dropped.
+  if (params.lat != null && params.lon != null) { qs.set("lat", String(params.lat)); qs.set("lon", String(params.lon)); }
   const url = `${API_BASE}/api/weather?${qs.toString()}`;
 
   let lastError = new WeatherError(

@@ -77,7 +77,7 @@ export default function App() {
       if (queryCity) {
         data = (await fetchWeather({ q: queryCity })) as Weather;
         setInputCity(queryCity);
-      } else if (lat && lon) {
+      } else if (lat !== null && lon !== null) {
         data = (await fetchWeather({ lat: parseFloat(lat), lon: parseFloat(lon) })) as Weather;
         setInputCity(data.city);
       } else {
