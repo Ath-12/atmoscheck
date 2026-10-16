@@ -1,86 +1,73 @@
 // client/src/components/VideoBackground.tsx
-import { useEffect, useState } from 'react';
+// Full-screen background picture that matches the weather. When the weather
+// changes (new search), the new picture fades in over the old one.
+// (Named "Video" for history: video loops are planned; images are used now
+// because they load much faster.)
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getWeatherAsset } from '../utils/videoMap';
 
 interface WeatherAsset {
   poster: string;
-  video: string;
 }
 
 interface VideoBackgroundProps {
   weatherId: number | null;
-  countryCode: string; // NEW PROP defined here
+  countryCode: string;
   dt?: number;
   sunrise?: number;
   sunset?: number;
+  timezone?: number; // city's offset from UTC in seconds
 }
 
-const VideoBackground = ({ weatherId, countryCode, dt, sunrise, sunset }: VideoBackgroundProps) => {
+const FADE_MS = 1000;
+
+const VideoBackground = ({ weatherId, countryCode, dt, sunrise, sunset, timezone = 0 }: VideoBackgroundProps) => {
+  const target = useMemo<WeatherAsset | null>(
+    () => (weatherId !== null && dt && sunrise && sunset
+      ? getWeatherAsset(weatherId, countryCode, dt, sunrise, sunset, timezone)
+      : null),
+    [weatherId, countryCode, dt, sunrise, sunset, timezone]
+  );
+
   const [currentAsset, setCurrentAsset] = useState<WeatherAsset | null>(null);
   const [nextAsset, setNextAsset] = useState<WeatherAsset | null>(null);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  // The picture currently on screen, readable inside the effect without
+  // making the effect re-run every time it changes.
+  const shown = useRef<WeatherAsset | null>(null);
 
   useEffect(() => {
-    if (weatherId !== null && dt && sunrise && sunset) {
-      // Pass countryCode to the function
-      const targetAsset = getWeatherAsset(
-        weatherId,
-        countryCode, 
-        dt,
-        sunrise,
-        sunset
-      ) as WeatherAsset;
-
-      if (!currentAsset) {
-        setCurrentAsset(targetAsset);
-        return;
-      }
-
-      if (targetAsset.poster !== currentAsset.poster) {
-        setNextAsset(targetAsset);
-        setIsTransitioning(true);
-        
-        const timer = setTimeout(() => {
-          setCurrentAsset(targetAsset);
-          setNextAsset(null);
-          setIsTransitioning(false);
-        }, 1000);
-
-        return () => clearTimeout(timer);
-      }
+    if (!target) return;
+    if (!shown.current) {                  // first picture: show directly
+      shown.current = target;
+      setCurrentAsset(target);
+      return;
     }
-  }, [weatherId, countryCode, dt, sunrise, sunset]); // Add countryCode to dependency array
+    if (target.poster === shown.current.poster) return;
+
+    setNextAsset(target);                  // fades in on top (CSS animation)
+    const timer = setTimeout(() => {
+      shown.current = target;
+      setCurrentAsset(target);
+      setNextAsset(null);
+    }, FADE_MS);
+    return () => clearTimeout(timer);
+  }, [target]);
 
   return (
     <div className="fixed inset-0 w-full h-full overflow-hidden -z-50 bg-black">
-      {/* We only use posters for now as requested, video tag is commented out but ready */}
-      {/* {currentAsset && (
-        <video
-          key={currentAsset.video}
-          autoPlay
-          muted
-          loop
-          playsInline
-          poster={currentAsset.poster}
-          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
-        >
-          <source src={currentAsset.video} type="video/webm" />
-        </video>
-      )} */}
-      
       {currentAsset && (
-        <img src={currentAsset.poster} alt="Current Weather" className="absolute inset-0 w-full h-full object-cover" />
+        <img src={currentAsset.poster} alt="" className="absolute inset-0 w-full h-full object-cover" />
       )}
-      
+
       {nextAsset && (
-        <img 
+        <img
           key={nextAsset.poster}
-          src={nextAsset.poster} 
-          alt="New Weather" 
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${isTransitioning ? 'opacity-100' : 'opacity-0'}`}
+          src={nextAsset.poster}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover animate-[bg-fade-in_1s_ease-in-out_both]"
         />
       )}
-      
+
       {/* Overlay for better text readability */}
       <div className="absolute inset-0 bg-black/40" />
     </div>

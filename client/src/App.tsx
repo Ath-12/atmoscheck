@@ -1,11 +1,16 @@
 // client/src/App.tsx
-import { useEffect, useState } from "react";
-import { fetchWeather } from "./lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { fetchWeather, WeatherError } from "./lib/api";
+import { clockDate as fmtDate, clockTime as fmtTime, hourLabel, weekday } from "./lib/time";
+import { fmtTemp, fmtWind, type Unit } from "./lib/units";
+import { weatherTips } from "./lib/tips";
+import { addRecent } from "./lib/recent";
+import { load, save } from "./lib/storage";
 import VideoBackground from "./components/VideoBackground";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { 
   Wind, Droplets, Eye, Sunrise, Sunset, 
-  MapPin, Search, Leaf, ArrowLeft, Calendar, Loader2, Clock, Umbrella
+  MapPin, Search, Leaf, ArrowLeft, Calendar, Loader2, Clock, Umbrella, Share2, Check
 } from "lucide-react";
 
 type HourlyItem = {
@@ -18,6 +23,8 @@ type HourlyItem = {
 type ForecastDay = {
   date: number;
   temp: number;
+  max?: number;
+  min?: number;
   condition: string;
   icon: string;
   pop: number;
@@ -34,8 +41,9 @@ type Weather = {
   windKph: number;
   pressure: number;
   visibility: number;
-  aqi: number;
-  pm25: number;
+  aqi: number | null;
+  pm25: number | null;
+  aqiSource?: "station" | "model" | null;
   id: number;
   dt: number;
   sunrise: number;
@@ -49,10 +57,13 @@ export default function App() {
   const [w, setW] = useState<Weather | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
+  const [unit, setUnit] = useState<Unit>(() => load<Unit>("atmoscheck.unit", "C"));
+  const [shared, setShared] = useState(false);
+  useEffect(() => save("atmoscheck.unit", unit), [unit]);
   const [clockTime, setClockTime] = useState<string>("--:--");
   const [clockDate, setClockDate] = useState<string>("");
   
-  // FIX: Removed 'setSearchParams' because it was unused and causing the build error
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
@@ -61,15 +72,25 @@ export default function App() {
   const lon = searchParams.get("lon");
   const [inputCity, setInputCity] = useState(queryCity || "");
 
-  async function loadData() {
+  // Encode the city so names like "St. John's" or "A&B" survive in the URL.
+  function search() {
+    const city = inputCity.trim();
+    if (city) navigate(`/weather?q=${encodeURIComponent(city)}`);
+  }
+
+  // Re-created only when the searched place changes; the effect below then reloads.
+  const loadData = useCallback(async () => {
     setLoading(true);
     setErr(null);
+    setSlow(false);
+    // If the answer takes more than 4 s, the free server is probably waking up: say so.
+    const slowTimer = setTimeout(() => setSlow(true), 4000);
     try {
       let data;
       if (queryCity) {
         data = (await fetchWeather({ q: queryCity })) as Weather;
         setInputCity(queryCity);
-      } else if (lat && lon) {
+      } else if (lat !== null && lon !== null) {
         data = (await fetchWeather({ lat: parseFloat(lat), lon: parseFloat(lon) })) as Weather;
         setInputCity(data.city);
       } else {
@@ -77,29 +98,47 @@ export default function App() {
         setInputCity("Mumbai");
       }
       setW(data);
-    } catch (e: any) {
-      setErr("Location not found. Try searching 'City, State'.");
+      addRecent(data.country ? `${data.city}, ${data.country}` : data.city);
+    } catch (e) {
+      setErr(e instanceof WeatherError ? e.message : "Something went wrong. Please try again.");
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setSlow(false);
     }
-  }
+  }, [queryCity, lat, lon]);
 
-  useEffect(() => { loadData(); }, [queryCity, lat, lon]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   // Tab Title
   useEffect(() => {
-    if (w) document.title = `${w.city} ${Math.round(w.tempC)}° | AtmosCheck`;
-  }, [w]);
+    if (w) document.title = `${w.city} ${fmtTemp(w.tempC, unit)}${unit} | AtmosCheck`;
+  }, [w, unit]);
+
+  // Share this city's link: native share sheet on phones, clipboard elsewhere.
+  async function shareLink() {
+    if (!w) return;
+    const url = `${location.origin}/weather?q=${encodeURIComponent(`${w.city}, ${w.country}`)}`;
+    const text = `${w.city}: ${fmtTemp(w.tempC, unit)}${unit}, ${w.conditionText}`;
+    try {
+      if (navigator.share) await navigator.share({ title: "AtmosCheck", text, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      }
+    } catch {
+      /* share sheet closed: nothing to do */
+    }
+  }
 
   // Clock
   useEffect(() => {
     if (!w) return;
     const tick = () => {
-      const now = new Date();
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const cityTime = new Date(utc + (w.timezone * 1000));
-      setClockTime(cityTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
-      setClockDate(cityTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
+      const now = Math.floor(Date.now() / 1000);
+      setClockTime(fmtTime(now, w.timezone));
+      setClockDate(fmtDate(now, w.timezone));
     };
     tick();
     const interval = setInterval(tick, 1000);
@@ -133,7 +172,8 @@ export default function App() {
           countryCode={w?.country ?? 'IN'} 
           dt={w?.dt} 
           sunrise={w?.sunrise} 
-          sunset={w?.sunset} 
+          sunset={w?.sunset}
+          timezone={w?.timezone ?? 0}
         />
       </div>
 
@@ -148,16 +188,48 @@ export default function App() {
             <input
               value={inputCity}
               onChange={(e) => setInputCity(e.target.value)}
-              onKeyDown={(e) => { if(e.key === 'Enter') navigate(`/weather?q=${inputCity}`); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
               placeholder="Search (e.g. Ratnagiri, MH)"
               className="w-full pl-4 pr-10 py-2 bg-black/20 border border-white/10 rounded-full backdrop-blur-md text-white outline-none focus:bg-black/40"
             />
-            <Search className="absolute right-3 top-2.5 w-4 h-4 text-white/50" />
+            <button onClick={search} aria-label="Search" className="absolute right-2 top-1.5 p-1 rounded-full hover:bg-white/10">
+              <Search className="w-4 h-4 text-white/70" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 ml-2 shrink-0">
+            <div role="group" aria-label="Temperature unit" className="flex bg-black/20 border border-white/10 rounded-full p-0.5 backdrop-blur-md text-sm">
+              {(["C", "F"] as Unit[]).map((u) => (
+                <button key={u} onClick={() => setUnit(u)} aria-pressed={unit === u}
+                  className={`px-2.5 py-1 rounded-full transition-colors ${unit === u ? "bg-white/25 font-semibold" : "opacity-60 hover:opacity-100"}`}>
+                  °{u}
+                </button>
+              ))}
+            </div>
+            {w && (
+              <button onClick={shareLink} aria-label="Share this city" title={shared ? "Link copied" : "Share"}
+                className="p-2 bg-black/20 hover:bg-black/40 rounded-full transition-colors backdrop-blur-md">
+                {shared ? <Check className="w-5 h-5 text-green-300" /> : <Share2 className="w-5 h-5" />}
+              </button>
+            )}
           </div>
         </div>
 
-        {loading && <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/20 backdrop-blur-sm"><Loader2 className="w-12 h-12 animate-spin text-white" /></div>}
-        {err && <div className="bg-red-500/50 px-6 py-2 rounded-full mb-4 backdrop-blur-md">{err}</div>}
+        {loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-50 bg-black/20 backdrop-blur-sm px-6 text-center">
+            <Loader2 className="w-12 h-12 animate-spin text-white" />
+            {slow && (
+              <p className="max-w-sm text-sm opacity-90" role="status">
+                Waking up the weather server… It sleeps when nobody's using it (free hosting), so the first search can take up to a minute.
+              </p>
+            )}
+          </div>
+        )}
+        {err && (
+          <div role="alert" className="bg-red-500/50 px-6 py-3 rounded-2xl mb-4 backdrop-blur-md max-w-xl text-center flex flex-col sm:flex-row items-center gap-3">
+            <span>{err}</span>
+            <button onClick={loadData} className="shrink-0 px-4 py-1 rounded-full bg-white/20 hover:bg-white/30 text-sm">Try again</button>
+          </div>
+        )}
 
         {w && !loading && (
           <div className="w-full max-w-4xl space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-10">
@@ -177,11 +249,14 @@ export default function App() {
                   </p>
                 </div>
                 <div className="flex flex-col items-center justify-center my-4">
-                  <span className="text-8xl font-thin tracking-tighter drop-shadow-xl">{Math.round(w.tempC)}°</span>
+                  <span className="text-8xl font-thin tracking-tighter drop-shadow-xl">{fmtTemp(w.tempC, unit)}</span>
                   <span className="text-xl capitalize opacity-90 font-medium">{w.conditionText}</span>
+                  <ul className="mt-4 space-y-1 text-sm text-center opacity-90" aria-label="Tips">
+                    {weatherTips(w).map((tip) => <li key={tip}>{tip}</li>)}
+                  </ul>
                 </div>
                 <div className="flex justify-between items-center border-t border-white/10 pt-4 opacity-80">
-                  <span>Feels like {Math.round(w.feelsLikeC)}°</span>
+                  <span>Feels like {fmtTemp(w.feelsLikeC, unit)}</span>
                   <span>Pressure {w.pressure} hPa</span>
                 </div>
               </div>
@@ -191,19 +266,30 @@ export default function App() {
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider">
                   <Leaf className="w-4 h-4" /> Air Quality
                 </div>
-                <div className="mt-2">
-                  <div className="text-4xl font-bold">{w.aqi}</div>
-                  <div className={`text-lg font-medium ${getAqiColor(w.aqi)}`}>{getAqiStatus(w.aqi)}</div>
-                </div>
-                <div className="w-full bg-white/10 h-1.5 rounded-full mt-4 overflow-hidden">
-                  <div className={`h-full bg-current ${getAqiColor(w.aqi)}`} style={{ width: `${Math.min((w.aqi / 300) * 100, 100)}%` }} />
-                </div>
+                {w.aqi === null ? (
+                  <div className="mt-2 text-lg opacity-70">Unavailable right now</div>
+                ) : (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-4xl font-bold">{w.aqi}</div>
+                      <div className={`text-lg font-medium ${getAqiColor(w.aqi)}`}>{getAqiStatus(w.aqi)}</div>
+                    </div>
+                    <div className="w-full bg-white/10 h-1.5 rounded-full mt-4 overflow-hidden">
+                      <div className={`h-full bg-current ${getAqiColor(w.aqi)}`} style={{ width: `${Math.min((w.aqi / 300) * 100, 100)}%` }} />
+                    </div>
+                    {w.aqiSource && (
+                      <div className="text-xs opacity-50 mt-2">
+                        US AQI · {w.aqiSource === "station" ? "ground station" : "model estimate"}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Wind / Hum / Vis / Sun */}
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider"><Wind className="w-4 h-4" /> Wind</div>
-                <div className="text-3xl font-bold mt-2">{Math.round(w.windKph)} <span className="text-base font-normal opacity-60">km/h</span></div>
+                <div className="text-3xl font-bold mt-2">{fmtWind(w.windKph, unit).value} <span className="text-base font-normal opacity-60">{fmtWind(w.windKph, unit).label}</span></div>
               </div>
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider"><Droplets className="w-4 h-4" /> Humidity</div>
@@ -216,12 +302,12 @@ export default function App() {
               <div className="md:col-span-2 bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex justify-around items-center">
                 <div className="text-center">
                   <div className="flex items-center gap-2 justify-center opacity-60 text-sm uppercase font-bold tracking-wider mb-2"><Sunrise className="w-5 h-5 text-orange-300" /> Sunrise</div>
-                  <div className="text-2xl font-semibold">{new Date(w.sunrise * 1000).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})}</div>
+                  <div className="text-2xl font-semibold">{fmtTime(w.sunrise, w.timezone)}</div>
                 </div>
                 <div className="w-px h-12 bg-white/10"></div>
                 <div className="text-center">
                   <div className="flex items-center gap-2 justify-center opacity-60 text-sm uppercase font-bold tracking-wider mb-2"><Sunset className="w-5 h-5 text-purple-300" /> Sunset</div>
-                  <div className="text-2xl font-semibold">{new Date(w.sunset * 1000).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})}</div>
+                  <div className="text-2xl font-semibold">{fmtTime(w.sunset, w.timezone)}</div>
                 </div>
               </div>
             </div>
@@ -229,13 +315,13 @@ export default function App() {
             {/* HOURLY FORECAST */}
             {w.hourly && w.hourly.length > 0 && (
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
-                <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider mb-4"><Clock className="w-4 h-4" /> Hourly Forecast</div>
+                <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider mb-4"><Clock className="w-4 h-4" /> Next 24 hours</div>
                 <div className="flex overflow-x-auto gap-4 pb-2 scrollbar-hide">
                   {w.hourly.map((hour, i) => (
                     <div key={i} className="flex flex-col items-center min-w-[80px] p-3 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
-                      <span className="opacity-70 text-sm whitespace-nowrap">{new Date(hour.dt * 1000).toLocaleTimeString([], {hour: 'numeric'})}</span>
-                      <img src={`https://openweathermap.org/img/wn/${hour.icon}.png`} alt="icon" className="w-8 h-8 my-1" />
-                      <span className="font-bold">{Math.round(hour.temp)}°</span>
+                      <span className="opacity-70 text-sm whitespace-nowrap">{hourLabel(hour.dt, w.timezone)}</span>
+                      <img src={`https://openweathermap.org/img/wn/${hour.icon}.png`} alt="" className="w-8 h-8 my-1" />
+                      <span className="font-bold">{fmtTemp(hour.temp, unit)}</span>
                       {hour.pop > 0 && (<span className="text-xs text-blue-300 flex items-center gap-0.5 mt-1"><Umbrella className="w-3 h-3" /> {Math.round(hour.pop * 100)}%</span>)}
                     </div>
                   ))}
@@ -250,9 +336,12 @@ export default function App() {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   {w.forecast.map((day, i) => (
                     <div key={i} className="flex flex-col items-center p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">
-                      <span className="opacity-70 text-sm mb-1">{new Date(day.date * 1000).toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                      <span className="opacity-70 text-sm mb-1">{i === 0 ? "Today" : weekday(day.date, w.timezone)}</span>
                       <img src={`https://openweathermap.org/img/wn/${day.icon}@2x.png`} alt={day.condition} className="w-10 h-10 opacity-90 drop-shadow-md" />
-                      <span className="text-xl font-bold my-1">{Math.round(day.temp)}°</span>
+                      <span className="text-xl font-bold my-1">
+                        {fmtTemp(day.max ?? day.temp, unit)}
+                        {day.min !== undefined && <span className="text-base font-normal opacity-50"> / {fmtTemp(day.min, unit)}</span>}
+                      </span>
                       <span className="text-xs opacity-50 capitalize mb-1">{day.condition}</span>
                       {day.pop > 0 && (<span className="text-xs text-blue-300 flex items-center gap-1"><Umbrella className="w-3 h-3" /> {Math.round(day.pop * 100)}%</span>)}
                     </div>
