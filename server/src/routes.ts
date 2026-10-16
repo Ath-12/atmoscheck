@@ -3,6 +3,7 @@ import { Router } from "express";
 import axios from "axios";
 import { TtlCache } from "./cache";
 import { getAqi } from "./aqi";
+import { toDaily, toHourly } from "./forecast";
 
 const router = Router();
 
@@ -88,29 +89,9 @@ router.get("/weather", async (req, res) => {
     const data = weatherRes.data;
     const forecastList = forecastRes.data.list;
 
-    // 4. Process Forecasts
-    const hourlyForecast = forecastList.slice(0, 8).map((item: any) => ({
-      dt: item.dt,
-      temp: item.main.temp,
-      icon: item.weather[0].icon,
-      pop: item.pop
-    }));
-
-    const dailyForecast = [];
-    const seenDates = new Set();
-    for (const item of forecastList) {
-      const date = new Date(item.dt * 1000).toLocaleDateString();
-      if (!seenDates.has(date) && dailyForecast.length < 5) {
-        seenDates.add(date);
-        dailyForecast.push({
-          date: item.dt,
-          temp: item.main.temp,
-          icon: item.weather[0].icon,
-          condition: item.weather[0].main,
-          pop: item.pop
-        });
-      }
-    }
+    // 4. Forecasts: next 24 h, and daily high/low grouped by the city's own date
+    const hourlyForecast = toHourly(forecastList);
+    const dailyForecast = toDaily(forecastList, data.timezone);
 
     const body = {
       city: correctCityName || data.name,

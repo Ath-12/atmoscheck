@@ -1,6 +1,7 @@
 // client/src/App.tsx
 import { useEffect, useState } from "react";
 import { fetchWeather } from "./lib/api";
+import { clockDate as fmtDate, clockTime as fmtTime, hourLabel, weekday } from "./lib/time";
 import VideoBackground from "./components/VideoBackground";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { 
@@ -18,6 +19,8 @@ type HourlyItem = {
 type ForecastDay = {
   date: number;
   temp: number;
+  max?: number;
+  min?: number;
   condition: string;
   icon: string;
   pop: number;
@@ -96,11 +99,9 @@ export default function App() {
   useEffect(() => {
     if (!w) return;
     const tick = () => {
-      const now = new Date();
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const cityTime = new Date(utc + (w.timezone * 1000));
-      setClockTime(cityTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
-      setClockDate(cityTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
+      const now = Math.floor(Date.now() / 1000);
+      setClockTime(fmtTime(now, w.timezone));
+      setClockDate(fmtDate(now, w.timezone));
     };
     tick();
     const interval = setInterval(tick, 1000);
@@ -228,12 +229,12 @@ export default function App() {
               <div className="md:col-span-2 bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex justify-around items-center">
                 <div className="text-center">
                   <div className="flex items-center gap-2 justify-center opacity-60 text-sm uppercase font-bold tracking-wider mb-2"><Sunrise className="w-5 h-5 text-orange-300" /> Sunrise</div>
-                  <div className="text-2xl font-semibold">{new Date(w.sunrise * 1000).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})}</div>
+                  <div className="text-2xl font-semibold">{fmtTime(w.sunrise, w.timezone)}</div>
                 </div>
                 <div className="w-px h-12 bg-white/10"></div>
                 <div className="text-center">
                   <div className="flex items-center gap-2 justify-center opacity-60 text-sm uppercase font-bold tracking-wider mb-2"><Sunset className="w-5 h-5 text-purple-300" /> Sunset</div>
-                  <div className="text-2xl font-semibold">{new Date(w.sunset * 1000).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})}</div>
+                  <div className="text-2xl font-semibold">{fmtTime(w.sunset, w.timezone)}</div>
                 </div>
               </div>
             </div>
@@ -245,7 +246,7 @@ export default function App() {
                 <div className="flex overflow-x-auto gap-4 pb-2 scrollbar-hide">
                   {w.hourly.map((hour, i) => (
                     <div key={i} className="flex flex-col items-center min-w-[80px] p-3 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
-                      <span className="opacity-70 text-sm whitespace-nowrap">{new Date(hour.dt * 1000).toLocaleTimeString([], {hour: 'numeric'})}</span>
+                      <span className="opacity-70 text-sm whitespace-nowrap">{hourLabel(hour.dt, w.timezone)}</span>
                       <img src={`https://openweathermap.org/img/wn/${hour.icon}.png`} alt="icon" className="w-8 h-8 my-1" />
                       <span className="font-bold">{Math.round(hour.temp)}°</span>
                       {hour.pop > 0 && (<span className="text-xs text-blue-300 flex items-center gap-0.5 mt-1"><Umbrella className="w-3 h-3" /> {Math.round(hour.pop * 100)}%</span>)}
@@ -262,9 +263,12 @@ export default function App() {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   {w.forecast.map((day, i) => (
                     <div key={i} className="flex flex-col items-center p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">
-                      <span className="opacity-70 text-sm mb-1">{new Date(day.date * 1000).toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                      <span className="opacity-70 text-sm mb-1">{i === 0 ? "Today" : weekday(day.date, w.timezone)}</span>
                       <img src={`https://openweathermap.org/img/wn/${day.icon}@2x.png`} alt={day.condition} className="w-10 h-10 opacity-90 drop-shadow-md" />
-                      <span className="text-xl font-bold my-1">{Math.round(day.temp)}°</span>
+                      <span className="text-xl font-bold my-1">
+                        {Math.round(day.max ?? day.temp)}°
+                        {day.min !== undefined && <span className="text-base font-normal opacity-50"> / {Math.round(day.min)}°</span>}
+                      </span>
                       <span className="text-xs opacity-50 capitalize mb-1">{day.condition}</span>
                       {day.pop > 0 && (<span className="text-xs text-blue-300 flex items-center gap-1"><Umbrella className="w-3 h-3" /> {Math.round(day.pop * 100)}%</span>)}
                     </div>
