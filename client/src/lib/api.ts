@@ -8,10 +8,11 @@
 //   - retries when the server can't be reached or is still starting,
 //   - turns each failure into a clear message instead of "Location not found".
 
-// Dev (npm run dev) -> local server. Production -> Render URL.
-export const API_BASE = import.meta.env.DEV
-  ? "http://localhost:5050"
-  : "https://atmoscheck.onrender.com";
+// Backend address. Set VITE_API_URL (e.g. in Vercel's environment variables)
+// to point at a different server; otherwise dev uses the local server and
+// production uses the Render deployment.
+export const API_BASE: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "")
+  ?? (import.meta.env.DEV ? "http://localhost:5050" : "https://atmoscheck.onrender.com");
 
 export type WeatherErrorKind = "not-found" | "bad-request" | "rate-limited" | "unavailable";
 
