@@ -16,16 +16,17 @@ interface VideoBackgroundProps {
   dt?: number;
   sunrise?: number;
   sunset?: number;
+  timezone?: number; // city's offset from UTC in seconds
 }
 
 const FADE_MS = 1000;
 
-const VideoBackground = ({ weatherId, countryCode, dt, sunrise, sunset }: VideoBackgroundProps) => {
+const VideoBackground = ({ weatherId, countryCode, dt, sunrise, sunset, timezone = 0 }: VideoBackgroundProps) => {
   const target = useMemo<WeatherAsset | null>(
     () => (weatherId !== null && dt && sunrise && sunset
-      ? getWeatherAsset(weatherId, countryCode, dt, sunrise, sunset)
+      ? getWeatherAsset(weatherId, countryCode, dt, sunrise, sunset, timezone)
       : null),
-    [weatherId, countryCode, dt, sunrise, sunset]
+    [weatherId, countryCode, dt, sunrise, sunset, timezone]
   );
 
   const [currentAsset, setCurrentAsset] = useState<WeatherAsset | null>(null);

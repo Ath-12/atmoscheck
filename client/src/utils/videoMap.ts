@@ -1,112 +1,82 @@
 // client/src/utils/videoMap.ts
+// Picks the background picture for the current weather.
+//
+// Inputs: OpenWeather condition code (https://openweathermap.org/weather-conditions),
+// country, current time, sunrise and sunset (all UTC seconds) and the city's
+// UTC offset (for local hour and month).
+//
+// Rules are checked from most specific to most general:
+//   1. golden hour: 45 min around sunrise / sunset with clear or cloudy skies
+//   2. night versions (dark pictures whenever the sun is down)
+//   3. day versions, with India-specific pictures where the weather looks
+//      different there (monsoon clouds, heavy rain, dust, morning fog)
 
-export const calculateIsDay = (dt: number, sunrise: number, sunset: number): boolean => {
-  return dt >= sunrise && dt < sunset;
-};
+export type WeatherAsset = { poster: string };
+
+const P = (name: string): WeatherAsset => ({ poster: `/posters/${name}.jpg` });
+const GOLDEN_HOUR_SEC = 45 * 60;
+const HEAVY_RAIN = [502, 503, 504, 522];
+
+export const calculateIsDay = (dt: number, sunrise: number, sunset: number): boolean =>
+  dt >= sunrise && dt < sunset;
+
+/** Local hour (0-23) and month (1-12) in the city. */
+export function localClock(dt: number, tzOffsetSec: number) {
+  const d = new Date((dt + tzOffsetSec) * 1000);
+  return { hour: d.getUTCHours(), month: d.getUTCMonth() + 1 };
+}
 
 export const getWeatherAsset = (
   weatherId: number,
   countryCode: string,
   dt: number,
   sunrise: number,
-  sunset: number
-) => {
+  sunset: number,
+  tzOffsetSec = 0
+): WeatherAsset => {
   const isDay = calculateIsDay(dt, sunrise, sunset);
   const isIndia = countryCode === 'IN';
+  const { hour, month } = localClock(dt, tzOffsetSec);
+  const isClearOrCloudy = weatherId >= 800;
 
-  // --- 1. NIGHT OVERRIDES (Safety First) ---
-  // If it is night, we generally want dark backgrounds regardless of subtle conditions.
-  
-  // Thunderstorm Night
-  if (weatherId >= 200 && weatherId < 300 && !isDay) {
-    return { poster: '/posters/thunder-night.jpg', video: '/videos/thunder.webm' };
+  // --- 1. Golden hour ---
+  if (isClearOrCloudy && Math.abs(dt - sunrise) <= GOLDEN_HOUR_SEC) return P('sunrise');
+  if (isClearOrCloudy && Math.abs(dt - sunset) <= GOLDEN_HOUR_SEC) {
+    return weatherId >= 802 ? P('clouds-sunset') : P('sunset');
   }
-  
-  // Rain Night
-  if (weatherId >= 500 && weatherId < 600 && !isDay) {
-    // Check for heavy rain at night
-    if ([502, 503, 504, 522].includes(weatherId) && isIndia) {
-       return { poster: '/posters/rain-heavy-night.jpg', video: '/videos/rain.webm' };
+
+  // --- 2. Night (dark pictures whenever the sun is down) ---
+  if (!isDay) {
+    if (weatherId >= 200 && weatherId < 300) return P('thunder-night');
+    if (weatherId >= 300 && weatherId < 600) {
+      return HEAVY_RAIN.includes(weatherId) && isIndia ? P('rain-heavy-night') : P('rain-night');
     }
-    return { poster: '/posters/rain-night.jpg', video: '/videos/rain.webm' };
+    if (weatherId >= 600 && weatherId < 700) return P('snow-night');
+    if (weatherId >= 700 && weatherId < 800) return P('fog-night'); // the "Mumbai 4 AM" fix
+    if (weatherId === 800) return P('clear-night');
+    return P('partly-cloudy-night');
   }
 
-  // Snow Night
-  if (weatherId >= 600 && weatherId < 700 && !isDay) {
-    return { poster: '/posters/snow-night.jpg', video: '/videos/snow.webm' };
-  }
-
-  // Atmosphere Night (Fog, Mist, Haze, Dust)
-  // FIX: This was the Mumbai 4AM bug. We force ALL atmosphere codes to fog-night if it's dark.
-  if (weatherId >= 700 && weatherId < 800 && !isDay) {
-    return { poster: '/posters/fog-night.jpg', video: '/videos/fog.webm' };
-  }
-
-  // Clear/Clouds Night
-  if (weatherId === 800 && !isDay) {
-    return { poster: '/posters/clear-night.jpg', video: '/videos/clear-night.webm' };
-  }
-  if (weatherId > 800 && !isDay) {
-    return { poster: '/posters/partly-cloudy-night.jpg', video: '/videos/clouds-night.webm' };
-  }
-
-
-  // --- 2. DAYTIME LOGIC ---
-
-  // Thunderstorm
-  if (weatherId >= 200 && weatherId < 300) {
-    return { poster: '/posters/thunder.jpg', video: '/videos/thunder.webm' };
-  }
-
-  // Drizzle
-  if (weatherId >= 300 && weatherId < 400) {
-    return { poster: '/posters/drizzle.jpg', video: '/videos/rain.webm' };
-  }
-
-  // Rain
+  // --- 3. Day ---
+  if (weatherId >= 200 && weatherId < 300) return P('thunder');
+  if (weatherId >= 300 && weatherId < 400) return P('drizzle');
   if (weatherId >= 500 && weatherId < 600) {
-    // Heavy Rain (India vs World)
-    if ([502, 503, 504, 522].includes(weatherId)) {
-      const poster = isIndia ? '/posters/rain-heavy-day.jpg' : '/posters/rain.jpg';
-      return { poster, video: '/videos/rain.webm' };
-    }
-    return { poster: '/posters/rain.jpg', video: '/videos/rain.webm' };
+    if (HEAVY_RAIN.includes(weatherId)) return isIndia ? P('rain-heavy-day') : P('storm');
+    return P('rain');
   }
-
-  // Snow
-  if (weatherId >= 600 && weatherId < 700) {
-    return { poster: '/posters/snow.jpg', video: '/videos/snow.webm' };
-  }
-
-  // Atmosphere (Fog, Haze, Dust)
+  if (weatherId >= 600 && weatherId < 700) return P('snow');
   if (weatherId >= 700 && weatherId < 800) {
-    // Dust/Sand
-    if ([731, 751, 761].includes(weatherId)) {
-      return { poster: isIndia ? '/posters/dust-day-india.jpg' : '/posters/dust.jpg', video: '/videos/fog.webm' };
-    }
-    // Haze / Smoke
-    if ([711, 721].includes(weatherId)) {
-      return { poster: '/posters/haze.jpg', video: '/videos/fog.webm' };
-    }
-    // Default Fog/Mist
-    return { poster: '/posters/fog.jpg', video: '/videos/fog.webm' };
+    if (weatherId === 771) return P('windy');                       // squalls
+    if (weatherId === 781) return P('storm');                       // tornado
+    if ([731, 751, 761].includes(weatherId)) return isIndia ? P('dust-day-india') : P('dust');
+    if ([711, 721].includes(weatherId)) return P('haze');           // smoke / haze
+    if (isIndia && hour < 10) return P('fog-morning-india');        // mist / fog early in the day
+    if (weatherId === 701) return P('mist-hills-day');
+    return P('fog');
   }
-
-  // Clear Day
-  if (weatherId === 800) {
-    return { poster: '/posters/clear-day.jpg', video: '/videos/clear-day.webm' };
-  }
-
-  // Clouds
-  if (weatherId > 800) {
-    // 801-802: Few Clouds
-    if (weatherId === 801 || weatherId === 802) {
-      return { poster: '/posters/partly-cloudy-day.jpg', video: '/videos/clouds-day.webm' };
-    }
-    // 803-804: Overcast (FIX: We used "overcast.jpg" before but file is "clouds.jpg")
-    return { poster: '/posters/clouds.jpg', video: '/videos/clouds-day.webm' };
-  }
-
-  // Fallback
-  return { poster: '/posters/clear-day.jpg', video: '/videos/clear-day.webm' };
+  if (weatherId === 800) return isIndia ? P('sunny-tropical-day') : P('clear-day');
+  if (weatherId === 801 || weatherId === 802) return P('partly-cloudy-day');
+  // 803-804 overcast: monsoon skies in India from June to September
+  if (isIndia && month >= 6 && month <= 9) return P('clouds-monsoon');
+  return P('clouds');
 };

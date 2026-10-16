@@ -4,11 +4,13 @@ import type { KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CloudRain, Zap, Search, ArrowRight, MapPin } from 'lucide-react';
 import { warmUpServer } from '../lib/api';
+import { clearRecent, getRecent } from '../lib/recent';
 
 export default function LandingPage() {
   const [city, setCity] = useState('');
   const [isLoadingLoc, setIsLoadingLoc] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
+  const [recent, setRecent] = useState<string[]>(() => getRecent());
   const navigate = useNavigate();
 
   // Start waking the (free-tier) backend while the visitor is still typing.
@@ -126,6 +128,19 @@ export default function LandingPage() {
 
           <div className="absolute inset-0 rounded-full ring-1 ring-white/20 group-hover:ring-white/40 pointer-events-none transition-all" />
         </div>
+        {recent.length > 0 && (
+          <div className="flex flex-wrap justify-center items-center gap-2 max-w-[450px]" aria-label="Recent searches">
+            {recent.map((c) => (
+              <button key={c} onClick={() => navigate(`/weather?q=${encodeURIComponent(c)}`)}
+                className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors">
+                {c}
+              </button>
+            ))}
+            <button onClick={() => { clearRecent(); setRecent([]); }} className="text-xs text-white/30 hover:text-white/60 px-1">
+              clear
+            </button>
+          </div>
+        )}
         {locError && (
           <p role="alert" className="max-w-[450px] text-center text-sm text-red-200 bg-red-500/20 rounded-2xl px-4 py-2">
             {locError}

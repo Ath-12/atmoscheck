@@ -2,11 +2,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchWeather, WeatherError } from "./lib/api";
 import { clockDate as fmtDate, clockTime as fmtTime, hourLabel, weekday } from "./lib/time";
+import { fmtTemp, fmtWind, type Unit } from "./lib/units";
+import { weatherTips } from "./lib/tips";
+import { addRecent } from "./lib/recent";
+import { load, save } from "./lib/storage";
 import VideoBackground from "./components/VideoBackground";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { 
   Wind, Droplets, Eye, Sunrise, Sunset, 
-  MapPin, Search, Leaf, ArrowLeft, Calendar, Loader2, Clock, Umbrella
+  MapPin, Search, Leaf, ArrowLeft, Calendar, Loader2, Clock, Umbrella, Share2, Check
 } from "lucide-react";
 
 type HourlyItem = {
@@ -54,10 +58,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [slow, setSlow] = useState(false);
+  const [unit, setUnit] = useState<Unit>(() => load<Unit>("atmoscheck.unit", "C"));
+  const [shared, setShared] = useState(false);
+  useEffect(() => save("atmoscheck.unit", unit), [unit]);
   const [clockTime, setClockTime] = useState<string>("--:--");
   const [clockDate, setClockDate] = useState<string>("");
   
-  // FIX: Removed 'setSearchParams' because it was unused and causing the build error
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
@@ -92,6 +98,7 @@ export default function App() {
         setInputCity("Mumbai");
       }
       setW(data);
+      addRecent(data.country ? `${data.city}, ${data.country}` : data.city);
     } catch (e) {
       setErr(e instanceof WeatherError ? e.message : "Something went wrong. Please try again.");
     } finally {
@@ -105,8 +112,25 @@ export default function App() {
 
   // Tab Title
   useEffect(() => {
-    if (w) document.title = `${w.city} ${Math.round(w.tempC)}° | AtmosCheck`;
-  }, [w]);
+    if (w) document.title = `${w.city} ${fmtTemp(w.tempC, unit)}${unit} | AtmosCheck`;
+  }, [w, unit]);
+
+  // Share this city's link: native share sheet on phones, clipboard elsewhere.
+  async function shareLink() {
+    if (!w) return;
+    const url = `${location.origin}/weather?q=${encodeURIComponent(`${w.city}, ${w.country}`)}`;
+    const text = `${w.city}: ${fmtTemp(w.tempC, unit)}${unit}, ${w.conditionText}`;
+    try {
+      if (navigator.share) await navigator.share({ title: "AtmosCheck", text, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      }
+    } catch {
+      /* share sheet closed: nothing to do */
+    }
+  }
 
   // Clock
   useEffect(() => {
@@ -148,7 +172,8 @@ export default function App() {
           countryCode={w?.country ?? 'IN'} 
           dt={w?.dt} 
           sunrise={w?.sunrise} 
-          sunset={w?.sunset} 
+          sunset={w?.sunset}
+          timezone={w?.timezone ?? 0}
         />
       </div>
 
@@ -170,6 +195,22 @@ export default function App() {
             <button onClick={search} aria-label="Search" className="absolute right-2 top-1.5 p-1 rounded-full hover:bg-white/10">
               <Search className="w-4 h-4 text-white/70" />
             </button>
+          </div>
+          <div className="flex items-center gap-2 ml-2 shrink-0">
+            <div role="group" aria-label="Temperature unit" className="flex bg-black/20 border border-white/10 rounded-full p-0.5 backdrop-blur-md text-sm">
+              {(["C", "F"] as Unit[]).map((u) => (
+                <button key={u} onClick={() => setUnit(u)} aria-pressed={unit === u}
+                  className={`px-2.5 py-1 rounded-full transition-colors ${unit === u ? "bg-white/25 font-semibold" : "opacity-60 hover:opacity-100"}`}>
+                  °{u}
+                </button>
+              ))}
+            </div>
+            {w && (
+              <button onClick={shareLink} aria-label="Share this city" title={shared ? "Link copied" : "Share"}
+                className="p-2 bg-black/20 hover:bg-black/40 rounded-full transition-colors backdrop-blur-md">
+                {shared ? <Check className="w-5 h-5 text-green-300" /> : <Share2 className="w-5 h-5" />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -208,11 +249,14 @@ export default function App() {
                   </p>
                 </div>
                 <div className="flex flex-col items-center justify-center my-4">
-                  <span className="text-8xl font-thin tracking-tighter drop-shadow-xl">{Math.round(w.tempC)}°</span>
+                  <span className="text-8xl font-thin tracking-tighter drop-shadow-xl">{fmtTemp(w.tempC, unit)}</span>
                   <span className="text-xl capitalize opacity-90 font-medium">{w.conditionText}</span>
+                  <ul className="mt-4 space-y-1 text-sm text-center opacity-90" aria-label="Tips">
+                    {weatherTips(w).map((tip) => <li key={tip}>{tip}</li>)}
+                  </ul>
                 </div>
                 <div className="flex justify-between items-center border-t border-white/10 pt-4 opacity-80">
-                  <span>Feels like {Math.round(w.feelsLikeC)}°</span>
+                  <span>Feels like {fmtTemp(w.feelsLikeC, unit)}</span>
                   <span>Pressure {w.pressure} hPa</span>
                 </div>
               </div>
@@ -245,7 +289,7 @@ export default function App() {
               {/* Wind / Hum / Vis / Sun */}
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider"><Wind className="w-4 h-4" /> Wind</div>
-                <div className="text-3xl font-bold mt-2">{Math.round(w.windKph)} <span className="text-base font-normal opacity-60">km/h</span></div>
+                <div className="text-3xl font-bold mt-2">{fmtWind(w.windKph, unit).value} <span className="text-base font-normal opacity-60">{fmtWind(w.windKph, unit).label}</span></div>
               </div>
               <div className="bg-black/20 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
                 <div className="flex items-center gap-2 opacity-60 text-sm uppercase font-bold tracking-wider"><Droplets className="w-4 h-4" /> Humidity</div>
@@ -276,8 +320,8 @@ export default function App() {
                   {w.hourly.map((hour, i) => (
                     <div key={i} className="flex flex-col items-center min-w-[80px] p-3 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
                       <span className="opacity-70 text-sm whitespace-nowrap">{hourLabel(hour.dt, w.timezone)}</span>
-                      <img src={`https://openweathermap.org/img/wn/${hour.icon}.png`} alt="icon" className="w-8 h-8 my-1" />
-                      <span className="font-bold">{Math.round(hour.temp)}°</span>
+                      <img src={`https://openweathermap.org/img/wn/${hour.icon}.png`} alt="" className="w-8 h-8 my-1" />
+                      <span className="font-bold">{fmtTemp(hour.temp, unit)}</span>
                       {hour.pop > 0 && (<span className="text-xs text-blue-300 flex items-center gap-0.5 mt-1"><Umbrella className="w-3 h-3" /> {Math.round(hour.pop * 100)}%</span>)}
                     </div>
                   ))}
@@ -295,8 +339,8 @@ export default function App() {
                       <span className="opacity-70 text-sm mb-1">{i === 0 ? "Today" : weekday(day.date, w.timezone)}</span>
                       <img src={`https://openweathermap.org/img/wn/${day.icon}@2x.png`} alt={day.condition} className="w-10 h-10 opacity-90 drop-shadow-md" />
                       <span className="text-xl font-bold my-1">
-                        {Math.round(day.max ?? day.temp)}°
-                        {day.min !== undefined && <span className="text-base font-normal opacity-50"> / {Math.round(day.min)}°</span>}
+                        {fmtTemp(day.max ?? day.temp, unit)}
+                        {day.min !== undefined && <span className="text-base font-normal opacity-50"> / {fmtTemp(day.min, unit)}</span>}
                       </span>
                       <span className="text-xs opacity-50 capitalize mb-1">{day.condition}</span>
                       {day.pop > 0 && (<span className="text-xs text-blue-300 flex items-center gap-1"><Umbrella className="w-3 h-3" /> {Math.round(day.pop * 100)}%</span>)}
