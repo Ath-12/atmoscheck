@@ -51,6 +51,9 @@ export function createApp() {
     })
   );
 
+  // Cheap endpoint the frontend pings to wake the server up early.
+  app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
   app.use("/api", routes);
   app.get("/", (_req, res) => res.send("AtmosCheck API OK"));
   return app;

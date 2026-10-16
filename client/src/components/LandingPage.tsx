@@ -1,13 +1,18 @@
 // client/src/components/LandingPage.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CloudRain, Zap, Search, ArrowRight, MapPin } from 'lucide-react'; 
+import { CloudRain, Zap, Search, ArrowRight, MapPin } from 'lucide-react';
+import { warmUpServer } from '../lib/api';
 
 export default function LandingPage() {
   const [city, setCity] = useState('');
   const [isLoadingLoc, setIsLoadingLoc] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Start waking the (free-tier) backend while the visitor is still typing.
+  useEffect(() => { warmUpServer(); }, []);
 
   const handleSearch = () => {
     if (city.trim()) {
@@ -23,6 +28,7 @@ export default function LandingPage() {
   // ... inside LandingPage component
 
   const handleLocationClick = () => {
+    setLocError(null);
     if (navigator.geolocation) {
       setIsLoadingLoc(true);
       
@@ -40,14 +46,18 @@ export default function LandingPage() {
           navigate(`/weather?lat=${lat}&lon=${lon}`);
         },
         (error) => {
-          console.error(error); // Log error for debugging
-          alert("Unable to retrieve location. Please type your city.");
+          console.error(error);
+          setLocError(
+            error.code === error.PERMISSION_DENIED
+              ? "Location permission was blocked. Type your city instead, or allow location in your browser settings."
+              : "Couldn't get your location. Please type your city."
+          );
           setIsLoadingLoc(false);
         },
         options // Pass the options here
       );
     } else {
-      alert("Geolocation is not supported by your browser");
+      setLocError("Your browser doesn't support location. Please type your city.");
     }
   };
 
@@ -116,6 +126,11 @@ export default function LandingPage() {
 
           <div className="absolute inset-0 rounded-full ring-1 ring-white/20 group-hover:ring-white/40 pointer-events-none transition-all" />
         </div>
+        {locError && (
+          <p role="alert" className="max-w-[450px] text-center text-sm text-red-200 bg-red-500/20 rounded-2xl px-4 py-2">
+            {locError}
+          </p>
+        )}
       </div>
     </div>
   );

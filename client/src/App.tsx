@@ -1,6 +1,6 @@
 // client/src/App.tsx
 import { useEffect, useState } from "react";
-import { fetchWeather } from "./lib/api";
+import { fetchWeather, WeatherError } from "./lib/api";
 import { clockDate as fmtDate, clockTime as fmtTime, hourLabel, weekday } from "./lib/time";
 import VideoBackground from "./components/VideoBackground";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -53,6 +53,7 @@ export default function App() {
   const [w, setW] = useState<Weather | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
   const [clockTime, setClockTime] = useState<string>("--:--");
   const [clockDate, setClockDate] = useState<string>("");
   
@@ -68,6 +69,9 @@ export default function App() {
   async function loadData() {
     setLoading(true);
     setErr(null);
+    setSlow(false);
+    // If the answer takes more than 4 s, the free server is probably waking up: say so.
+    const slowTimer = setTimeout(() => setSlow(true), 4000);
     try {
       let data;
       if (queryCity) {
@@ -81,10 +85,12 @@ export default function App() {
         setInputCity("Mumbai");
       }
       setW(data);
-    } catch (e: any) {
-      setErr("Location not found. Try searching 'City, State'.");
+    } catch (e) {
+      setErr(e instanceof WeatherError ? e.message : "Something went wrong. Please try again.");
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setSlow(false);
     }
   }
 
@@ -158,8 +164,22 @@ export default function App() {
           </div>
         </div>
 
-        {loading && <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/20 backdrop-blur-sm"><Loader2 className="w-12 h-12 animate-spin text-white" /></div>}
-        {err && <div className="bg-red-500/50 px-6 py-2 rounded-full mb-4 backdrop-blur-md">{err}</div>}
+        {loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-50 bg-black/20 backdrop-blur-sm px-6 text-center">
+            <Loader2 className="w-12 h-12 animate-spin text-white" />
+            {slow && (
+              <p className="max-w-sm text-sm opacity-90" role="status">
+                Waking up the weather server… It sleeps when nobody's using it (free hosting), so the first search can take up to a minute.
+              </p>
+            )}
+          </div>
+        )}
+        {err && (
+          <div role="alert" className="bg-red-500/50 px-6 py-3 rounded-2xl mb-4 backdrop-blur-md max-w-xl text-center flex flex-col sm:flex-row items-center gap-3">
+            <span>{err}</span>
+            <button onClick={loadData} className="shrink-0 px-4 py-1 rounded-full bg-white/20 hover:bg-white/30 text-sm">Try again</button>
+          </div>
+        )}
 
         {w && !loading && (
           <div className="w-full max-w-4xl space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-10">
