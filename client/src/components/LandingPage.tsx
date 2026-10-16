@@ -16,7 +16,7 @@ export default function LandingPage() {
 
   const handleSearch = () => {
     if (city.trim()) {
-      navigate(`/weather?q=${city}`);
+      navigate(`/weather?q=${encodeURIComponent(city.trim())}`);
     }
   };
 

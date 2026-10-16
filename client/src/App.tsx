@@ -66,6 +66,12 @@ export default function App() {
   const lon = searchParams.get("lon");
   const [inputCity, setInputCity] = useState(queryCity || "");
 
+  // Encode the city so names like "St. John's" or "A&B" survive in the URL.
+  function search() {
+    const city = inputCity.trim();
+    if (city) navigate(`/weather?q=${encodeURIComponent(city)}`);
+  }
+
   async function loadData() {
     setLoading(true);
     setErr(null);
@@ -156,11 +162,13 @@ export default function App() {
             <input
               value={inputCity}
               onChange={(e) => setInputCity(e.target.value)}
-              onKeyDown={(e) => { if(e.key === 'Enter') navigate(`/weather?q=${inputCity}`); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
               placeholder="Search (e.g. Ratnagiri, MH)"
               className="w-full pl-4 pr-10 py-2 bg-black/20 border border-white/10 rounded-full backdrop-blur-md text-white outline-none focus:bg-black/40"
             />
-            <Search className="absolute right-3 top-2.5 w-4 h-4 text-white/50" />
+            <button onClick={search} aria-label="Search" className="absolute right-2 top-1.5 p-1 rounded-full hover:bg-white/10">
+              <Search className="w-4 h-4 text-white/70" />
+            </button>
           </div>
         </div>
 
